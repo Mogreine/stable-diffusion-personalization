@@ -26,7 +26,7 @@ class TrainConfig:
     # Path to the output directory.
     output_dir: str = field(default=None)
     # Random seed.
-    seed: int = field(default=57)
+    seed: int = field(default=123)
     # Use gradient checkpointing.
     gradient_checkpointing: bool = field(default=False)
     # Use 8-bit Adam.

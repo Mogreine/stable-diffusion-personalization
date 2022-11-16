@@ -189,6 +189,7 @@ def train(
             if accelerator.sync_gradients:
                 progress_bar.update(1)
                 global_step += 1
+                progress_bar.set_postfix({"loss": loss.detach().item()})
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             accelerator.log(logs, step=global_step)
@@ -208,6 +209,7 @@ def main(cfg: TrainConfig):
         gradient_accumulation_steps=1,
         mixed_precision=cfg.precision,
         logging_dir=logging_dir,
+        fp16=cfg.precision == "fp16",
     )
 
     text_encoder = CLIPTextModel.from_pretrained(cfg.model_path, subfolder="text_encoder", use_auth_token=True)
@@ -243,17 +245,21 @@ def main(cfg: TrainConfig):
         size=cfg.resolution,
         center_crop=False,
     )
+
+    # Freeze text encoder
     text_encoder.requires_grad_(False)
     text_encoder.eval()
+
+    # Reset unet weights
+    # unet = UNet2DConditionModel.from_pretrained(cfg.model_path, subfolder="unet", use_auth_token=True)
+
+    # Start training
     train(accelerator, vae, unet, text_encoder, tokenizer, train_dataset, cfg, is_train_text_encoder=False)
 
     # Create the pipeline using the trained modules and save it.
     if accelerator.is_main_process:
-        vae.to("cpu")
         unet = accelerator.unwrap_model(unet)
-        unet.to("cpu")
         text_encoder = accelerator.unwrap_model(text_encoder)
-        text_encoder.to("cpu")
 
         pipeline = StableDiffusionPipeline.from_pretrained(
             cfg.model_path,
