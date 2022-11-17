@@ -69,8 +69,7 @@ class DreamBoothPipeline:
         noise = torch.randn_like(latents)
         bsz = latents.shape[0]
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,),
-                                  device=latents.device)
+        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
         timesteps = timesteps.long()
 
         # Add noise to the latents according to the noise magnitude at each timestep
@@ -86,10 +85,12 @@ class DreamBoothPipeline:
         return noise, noise_pred
 
     def train(self, n_steps: int, train_text_encoder: bool, train_unet: bool):
+        # Enabling gradient checkpoint
         if self.cfg.gradient_checkpointing:
             self.text_encoder.gradient_checkpointing_enable()
             self.unet.gradient_checkpointing_enable()
 
+        # Freezing models
         if not train_text_encoder:
             self.text_encoder.gradient_checkpointing_disable()
             self._freeze_model(self.text_encoder)
@@ -108,8 +109,9 @@ class DreamBoothPipeline:
         )
 
         params_to_optimize = (
-            itertools.chain(self.unet.parameters(),
-                            self.text_encoder.parameters()) if train_text_encoder else self.unet.parameters()
+            itertools.chain(self.unet.parameters(), self.text_encoder.parameters())
+            if train_text_encoder
+            else self.unet.parameters()
         )
         optimizer = torch.optim.AdamW(
             params_to_optimize,
@@ -119,7 +121,9 @@ class DreamBoothPipeline:
             eps=self.cfg.adam_epsilon,
         )
 
-        collate_fn_ = functools.partial(collate_fn, with_prior_preservation=train_text_encoder, tokenizer=self.tokenizer)
+        collate_fn_ = functools.partial(
+            collate_fn, with_prior_preservation=train_text_encoder, tokenizer=self.tokenizer
+        )
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_
         )
