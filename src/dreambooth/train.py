@@ -25,13 +25,18 @@ from src.utils import convert2ckpt
 class DreamBoothPipeline:
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
+        self.precision = torch.float32
+        self.device = "cuda"
 
         # Loading and freezing VAE
         self.vae = AutoencoderKL.from_pretrained(cfg.model_path, subfolder="vae", use_auth_token=True)
         self._freeze_model(self.vae)
+        self.vae.to(self.device, dtype=self.precision)
 
         self.text_encoder = CLIPTextModel.from_pretrained(cfg.model_path, subfolder="text_encoder", use_auth_token=True)
+        self.text_encoder.to(self.device, dtype=self.precision)
         self.unet = UNet2DConditionModel.from_pretrained(cfg.model_path, subfolder="unet", use_auth_token=True)
+        self.unet.to(self.device, dtype=self.precision)
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
             cfg.model_path,
@@ -39,7 +44,6 @@ class DreamBoothPipeline:
         )
 
         self.noise_scheduler = DDPMScheduler.from_config(cfg.model_path, subfolder="scheduler")
-        self.precision = torch.float32
 
     def _freeze_model(self, model):
         model.requires_grad_(False)
@@ -50,7 +54,7 @@ class DreamBoothPipeline:
         loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="none").mean([1, 2, 3]).mean()
 
         # Compute prior loss
-        if noise_prior_pred and noise_prior:
+        if noise_prior_pred is not None and noise_prior is not None:
             prior_loss = F.mse_loss(noise_prior_pred.float(), noise_prior.float(), reduction="mean")
         else:
             prior_loss = 0
@@ -61,6 +65,8 @@ class DreamBoothPipeline:
         return loss
 
     def _train_step(self, batch):
+        # Move batch to device
+        batch = {k: v.to(self.device) for k, v in batch.items()}
         # Convert images to latent space
         latents = self.vae.encode(batch["pixel_values"].to(dtype=self.precision)).latent_dist.sample()
         latents = latents * 0.18215
