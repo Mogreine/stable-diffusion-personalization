@@ -57,6 +57,5 @@ class TrainConfig:
     resolution: int = field(default=512)
 
     def __post_init__(self):
-        assert self.precision in ["fp16", "fp32", "bf16"], f"Invalid precision type: {self.precision}"
         assert self.instance_prompt is not None, "Instance prompt must be specified."
         assert self.class_prompt is not None, "Class prompt must be specified."

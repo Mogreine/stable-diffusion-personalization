@@ -207,9 +207,8 @@ def main(cfg: TrainConfig):
 
     accelerator = Accelerator(
         gradient_accumulation_steps=1,
-        mixed_precision=cfg.precision,
+        mixed_precision="fp16",
         logging_dir=logging_dir,
-        fp16=cfg.precision == "fp16",
     )
 
     text_encoder = CLIPTextModel.from_pretrained(cfg.model_path, subfolder="text_encoder", use_auth_token=True)
