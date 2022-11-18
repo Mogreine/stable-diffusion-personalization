@@ -32,7 +32,7 @@ class TrainConfig:
     # Use 8-bit Adam.
     use_8bit_adam: bool = field(default=False)
     # Learning rate.
-    lr: float = field(default=2e-6)
+    lr: float = field(default=5e-6)
     # Weight decay.
     w_decay: float = field(default=0.01)
     # Adam epsilon.
@@ -50,11 +50,13 @@ class TrainConfig:
     # Prior loss weight.
     prior_loss_weight: float = field(default=1.0)
     # LR scheduler.
-    lr_scheduler: str = field(default="polynomial")
+    lr_scheduler: str = field(default="constant")
     # LR scheduler warmup steps.
     n_warmup_steps: int = field(default=0)
     # Resolution.
     resolution: int = field(default=512)
+    # Log images every n steps.
+    log_images_every_n_steps: int = field(default=50)
 
     def __post_init__(self):
         assert self.instance_prompt is not None, "Instance prompt must be specified."

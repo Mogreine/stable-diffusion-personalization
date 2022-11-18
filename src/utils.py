@@ -1,9 +1,12 @@
 import os
 from typing import List
 
+import PIL
 from PIL import Image
 import os.path as osp
 import torch
+from diffusers import StableDiffusionPipeline, EulerAncestralDiscreteScheduler
+from torchvision import transforms
 
 
 def read_photos_from_folder(path: str) -> List[Image.Image]:
@@ -210,17 +213,17 @@ def convert2ckpt(ckpt_dir):
     text_enc_path = osp.join(ckpt_dir, "text_encoder", "pytorch_model.bin")
 
     # Convert the UNet model
-    unet_state_dict = torch.load(unet_path, map_location='cpu')
+    unet_state_dict = torch.load(unet_path, map_location="cpu")
     unet_state_dict = convert_unet_state_dict(unet_state_dict)
     unet_state_dict = {"model.diffusion_model." + k: v for k, v in unet_state_dict.items()}
 
     # Convert the VAE model
-    vae_state_dict = torch.load(vae_path, map_location='cpu')
+    vae_state_dict = torch.load(vae_path, map_location="cpu")
     vae_state_dict = convert_vae_state_dict(vae_state_dict)
     vae_state_dict = {"first_stage_model." + k: v for k, v in vae_state_dict.items()}
 
     # Convert the text encoder model
-    text_enc_dict = torch.load(text_enc_path, map_location='cpu')
+    text_enc_dict = torch.load(text_enc_path, map_location="cpu")
     text_enc_dict = convert_text_enc_state_dict(text_enc_dict)
     text_enc_dict = {"cond_stage_model.transformer." + k: v for k, v in text_enc_dict.items()}
 
@@ -230,3 +233,30 @@ def convert2ckpt(ckpt_dir):
     state_dict = {k: v.half() for k, v in state_dict.items()}
     state_dict = {"state_dict": state_dict}
     torch.save(state_dict, os.path.join(ckpt_dir, "model.ckpt"))
+
+
+def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=EulerAncestralDiscreteScheduler()):
+    pipeline = StableDiffusionPipeline(
+        vae=vae,
+        unet=unet,
+        text_encoder=text_encoder,
+        tokenizer=tokenizer,
+        scheduler=scheduler,
+        safety_checker=None,
+        feature_extractor=None,
+    )
+    images = pipeline(
+        prompt, num_inference_steps=40, guidance_scale=7.5, num_images_per_prompt=4, generator=torch.manual_seed(57)
+    ).images
+    return images
+
+
+def pil2tensor(im: PIL.Image.Image, size=512):
+    image_transforms = transforms.Compose(
+        [
+            transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5], [0.5]),
+        ]
+    )
+    return image_transforms(im)

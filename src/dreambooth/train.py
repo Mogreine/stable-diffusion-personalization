@@ -3,7 +3,10 @@ import itertools
 import math
 from pathlib import Path
 import bitsandbytes as bnb
+import lpips
+import numpy as np
 import pyrallis
+import wandb
 
 import torch
 import torch.nn.functional as F
@@ -19,7 +22,7 @@ from loguru import logger
 
 from src.dreambooth.datasets import PromptDataset, DreamBoothDataset, collate_fn
 from src.dreambooth.configs import TrainConfig
-from src.utils import convert2ckpt
+from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor
 
 
 class DreamBoothPipeline:
@@ -42,6 +45,7 @@ class DreamBoothPipeline:
             cfg.model_path,
             subfolder="tokenizer",
         )
+        self.lpips = lpips.LPIPS(net="alex").to(self.device, dtype=self.precision)
 
         self.noise_scheduler = DDPMScheduler.from_config(cfg.model_path, subfolder="scheduler")
 
@@ -89,6 +93,27 @@ class DreamBoothPipeline:
         noise_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states).sample
 
         return noise, noise_pred
+
+    def _set_wise_lil_peep(self, set1, set2):
+        res = np.mean([self.lpips(im, set2).mean().item() for im in set1])
+        return res
+
+    @torch.no_grad()
+    def _log_images(self):
+        # Generating images
+        images_generated = sample_images(
+            self.cfg.instance_prompt, self.vae, self.unet, self.text_encoder, self.tokenizer
+        )
+        images_gt = read_photos_from_folder(self.cfg.instance_data_folder)
+
+        # Converting PIL images to tensors
+        images_generated_t = torch.stack([pil2tensor(im) for im in images_generated]).to(self.device)
+        images_gt_t = torch.stack([pil2tensor(im) for im in images_gt]).to(self.device)
+
+        # Calculating LPIPS
+        lil_peep = self._set_wise_lil_peep(images_generated_t, images_gt_t)
+
+        wandb.log({"images": [wandb.Image(im) for im in images_generated], "lpips": lil_peep})
 
     def train(self, n_steps: int, train_text_encoder: bool, train_unet: bool):
         # Enabling gradient checkpoint
@@ -183,7 +208,10 @@ class DreamBoothPipeline:
                 global_step += 1
                 progress_bar.set_postfix({"loss": loss.detach().item()})
 
-                logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+                # Logging
+                wandb.log({"loss": loss.detach().item()})
+                if global_step % self.cfg.log_images_every_n_steps == 0:
+                    self._log_images()
 
                 if global_step >= n_steps:
                     break
@@ -200,13 +228,16 @@ class DreamBoothPipeline:
 
 @pyrallis.wrap()
 def main(cfg: TrainConfig):
-    logging_dir = Path(cfg.output_dir, "logs/")
     set_seed(cfg.seed)
+
+    logging_dir = Path(cfg.output_dir, "logs/")
+    wandb.init(project="dreambooth", config=cfg, dir=logging_dir)
 
     dreambooth_pipeline = DreamBoothPipeline(cfg)
 
+    # dreambooth_pipeline.train(1000, train_text_encoder=False, train_unet=True)
     dreambooth_pipeline.train(350, train_text_encoder=True, train_unet=True)
-    dreambooth_pipeline.train(1000, train_text_encoder=False, train_unet=True)
+    dreambooth_pipeline.train(500, train_text_encoder=False, train_unet=True)
 
     dreambooth_pipeline.save_sd()
 
