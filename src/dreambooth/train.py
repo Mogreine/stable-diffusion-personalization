@@ -114,7 +114,7 @@ class DreamBoothPipeline:
     def _log_images(self):
         # Generating images
         images_generated = sample_images(
-            self.cfg.instance_prompt, self.vae, self.unet, self.text_encoder, self.tokenizer
+            "a sks man", self.vae, self.unet, self.text_encoder, self.tokenizer
         )
         images_gt = read_photos_from_folder(self.cfg.instance_data_folder)
 

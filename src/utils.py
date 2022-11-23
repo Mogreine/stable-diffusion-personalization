@@ -17,6 +17,10 @@ def read_photos_from_folder(path: str) -> List[Image.Image]:
     return images
 
 
+def extract_filename(path: str) -> str:
+    return osp.splitext(osp.basename(path))[0]
+
+
 # Script for converting a HF Diffusers saved pipeline to a Stable Diffusion checkpoint.
 # *Only* converts the UNet, VAE, and Text Encoder.
 # Does not convert optimizer state or any other thing.

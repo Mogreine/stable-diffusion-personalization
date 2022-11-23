@@ -12,7 +12,7 @@ class TrainConfig:
     # Path to the model to fine-tune.
     model_path: str = field(default="models/sd-v1-5-vae-mse")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/kirill_5")
+    instance_data_folder: str = field(default="data/instance_images/kirill_captions")
     # Prompt for the instance images.
     instance_prompt: str = field(default=None)
     # Path to the class images.
@@ -61,5 +61,6 @@ class TrainConfig:
     use_prior_preservation: bool = field(default=True)
 
     def __post_init__(self):
-        assert self.instance_prompt is not None, "Instance prompt must be specified."
+        ...
+        # assert self.instance_prompt is not None, "Instance prompt must be specified."
         # assert self.class_prompt is not None, "Class prompt must be specified."
