@@ -10,13 +10,13 @@ from definitions import ROOT_DIR
 class TrainConfig:
     """Config for training."""
     # Path to the model to fine-tune.
-    model_path: str = field(default="runwayml/stable-diffusion-v1-5")
+    model_path: str = field(default="models/sd-v1-5-vae-mse")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/kirill")
+    instance_data_folder: str = field(default="data/instance_images/kirill_5")
     # Prompt for the instance images.
     instance_prompt: str = field(default=None)
     # Path to the class images.
-    class_data_folder: str = field(default=None)
+    class_data_folder: str = field(default="data/class_images/Men")
     # Prompt for the class images.
     class_prompt: str = field(default=None)
     # Number of fine-tuning steps.
@@ -32,7 +32,7 @@ class TrainConfig:
     # Use 8-bit Adam.
     use_8bit_adam: bool = field(default=False)
     # Learning rate.
-    lr: float = field(default=5e-6)
+    lr: float = field(default=2e-6)
     # Weight decay.
     w_decay: float = field(default=0.01)
     # Adam epsilon.
@@ -56,8 +56,10 @@ class TrainConfig:
     # Resolution.
     resolution: int = field(default=512)
     # Log images every n steps.
-    log_images_every_n_steps: int = field(default=50)
+    log_images_every_n_steps: int = field(default=100)
+    # Use regularization.
+    use_prior_preservation: bool = field(default=True)
 
     def __post_init__(self):
         assert self.instance_prompt is not None, "Instance prompt must be specified."
-        assert self.class_prompt is not None, "Class prompt must be specified."
+        # assert self.class_prompt is not None, "Class prompt must be specified."

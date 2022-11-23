@@ -28,18 +28,13 @@ from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2
 class DreamBoothPipeline:
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
-        self.precision = torch.float32
+        self.precision = torch.float16
         self.device = "cuda"
 
-        # Loading and freezing VAE
-        self.vae = AutoencoderKL.from_pretrained(cfg.model_path, subfolder="vae", use_auth_token=True)
-        self._freeze_model(self.vae)
-        self.vae.to(self.device, dtype=self.precision)
-
-        self.text_encoder = CLIPTextModel.from_pretrained(cfg.model_path, subfolder="text_encoder", use_auth_token=True)
-        self.text_encoder.to(self.device, dtype=self.precision)
-        self.unet = UNet2DConditionModel.from_pretrained(cfg.model_path, subfolder="unet", use_auth_token=True)
-        self.unet.to(self.device, dtype=self.precision)
+        # Loading models
+        self.load_weights("vae")
+        self.load_weights("unet")
+        self.load_weights("text_encoder")
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
             cfg.model_path,
@@ -48,6 +43,23 @@ class DreamBoothPipeline:
         self.lpips = lpips.LPIPS(net="alex").to(self.device, dtype=self.precision)
 
         self.noise_scheduler = DDPMScheduler.from_config(cfg.model_path, subfolder="scheduler")
+
+    def load_weights(self, model_name: str):
+        if model_name == "vae":
+            self.vae = AutoencoderKL.from_pretrained(self.cfg.model_path, subfolder="vae", use_auth_token=True)
+            # self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse")
+            self._freeze_model(self.vae)
+            self.vae.to(self.device)
+        elif model_name == "unet":
+            self.unet = UNet2DConditionModel.from_pretrained(self.cfg.model_path, subfolder="unet", use_auth_token=True)
+            self.unet.to(self.device)
+        elif model_name == "text_encoder":
+            self.text_encoder = CLIPTextModel.from_pretrained(
+                self.cfg.model_path, subfolder="text_encoder", use_auth_token=True
+            )
+            self.text_encoder.to(self.device)
+        else:
+            raise ValueError(f"Unknown model name: {model_name}")
 
     def _freeze_model(self, model):
         model.requires_grad_(False)
@@ -72,7 +84,7 @@ class DreamBoothPipeline:
         # Move batch to device
         batch = {k: v.to(self.device) for k, v in batch.items()}
         # Convert images to latent space
-        latents = self.vae.encode(batch["pixel_values"].to(dtype=self.precision)).latent_dist.sample()
+        latents = self.vae.encode(batch["pixel_values"]).latent_dist.sample()
         latents = latents * 0.18215
 
         # Sample noise that we'll add to the latents
@@ -132,7 +144,7 @@ class DreamBoothPipeline:
         train_dataset = DreamBoothDataset(
             instance_data_root=self.cfg.instance_data_folder,
             instance_prompt=self.cfg.instance_prompt,
-            class_data_root=self.cfg.class_data_folder if train_text_encoder else None,
+            class_data_root=self.cfg.class_data_folder if self.cfg.use_prior_preservation else None,
             class_prompt=self.cfg.class_prompt,
             tokenizer=self.tokenizer,
             size=self.cfg.resolution,
@@ -153,7 +165,7 @@ class DreamBoothPipeline:
         )
 
         collate_fn_ = functools.partial(
-            collate_fn, with_prior_preservation=train_text_encoder, tokenizer=self.tokenizer
+            collate_fn, with_prior_preservation=self.cfg.use_prior_preservation, tokenizer=self.tokenizer
         )
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_
@@ -182,6 +194,7 @@ class DreamBoothPipeline:
         progress_bar = tqdm(range(n_steps))
         global_step = 0
 
+        scaler = torch.cuda.amp.GradScaler()
         for epoch in range(n_epochs):
             if train_unet:
                 self.unet.train()
@@ -189,18 +202,22 @@ class DreamBoothPipeline:
                 self.text_encoder.train()
 
             for step, batch in enumerate(train_dataloader):
-                noise, noise_pred = self._train_step(batch)
-                noise_prior, noise_prior_pred = None, None
+                with torch.amp.autocast(device_type=self.device, dtype=self.precision):
+                    noise, noise_pred = self._train_step(batch)
+                    noise_prior, noise_prior_pred = None, None
 
-                if train_text_encoder:
-                    # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
-                    noise_pred, noise_prior_pred = torch.chunk(noise_pred, 2, dim=0)
-                    noise, noise_prior = torch.chunk(noise, 2, dim=0)
+                    if self.cfg.use_prior_preservation:
+                        # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
+                        noise_pred, noise_prior_pred = torch.chunk(noise_pred, 2, dim=0)
+                        noise, noise_prior = torch.chunk(noise, 2, dim=0)
 
-                loss = self._loss(noise, noise_pred, noise_prior, noise_prior_pred)
+                    loss = self._loss(noise, noise_pred, noise_prior, noise_prior_pred)
 
-                loss.backward()
-                optimizer.step()
+                # Backward pass with loss scaling
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
@@ -211,7 +228,8 @@ class DreamBoothPipeline:
                 # Logging
                 wandb.log({"loss": loss.detach().item()})
                 if global_step % self.cfg.log_images_every_n_steps == 0:
-                    self._log_images()
+                    with torch.amp.autocast(device_type=self.device, dtype=self.precision):
+                        self._log_images()
 
                 if global_step >= n_steps:
                     break
@@ -221,6 +239,8 @@ class DreamBoothPipeline:
             self.cfg.model_path,
             unet=self.unet,
             text_encoder=self.text_encoder,
+            feature_extractor=None,
+            safety_checker=None,
         )
         pipeline.save_pretrained(self.cfg.output_dir)
         convert2ckpt(self.cfg.output_dir)
@@ -235,9 +255,9 @@ def main(cfg: TrainConfig):
 
     dreambooth_pipeline = DreamBoothPipeline(cfg)
 
-    # dreambooth_pipeline.train(1000, train_text_encoder=False, train_unet=True)
-    dreambooth_pipeline.train(350, train_text_encoder=True, train_unet=True)
-    dreambooth_pipeline.train(500, train_text_encoder=False, train_unet=True)
+    dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
+    dreambooth_pipeline.load_weights("unet")
+    dreambooth_pipeline.train(1000, train_text_encoder=False, train_unet=True)
 
     dreambooth_pipeline.save_sd()
 

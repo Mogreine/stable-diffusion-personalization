@@ -246,7 +246,7 @@ def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=EulerAnc
         feature_extractor=None,
     )
     images = pipeline(
-        prompt, num_inference_steps=40, guidance_scale=7.5, num_images_per_prompt=4, generator=torch.manual_seed(57)
+        prompt, num_inference_steps=80, guidance_scale=8, num_images_per_prompt=4
     ).images
     return images
 
