@@ -12,11 +12,11 @@ class TrainConfig:
     # Path to the model to fine-tune.
     model_path: str = field(default="models/sd-v1-5-vae-mse")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/kirill_captions")
+    instance_data_folder: str = field(default="data/instance_images/director")
     # Prompt for the instance images.
     instance_prompt: str = field(default=None)
     # Path to the class images.
-    class_data_folder: str = field(default="data/class_images/Men")
+    class_data_folder: str = field(default="data/class_images/Women")
     # Prompt for the class images.
     class_prompt: str = field(default=None)
     # Number of fine-tuning steps.

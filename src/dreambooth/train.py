@@ -257,7 +257,7 @@ def main(cfg: TrainConfig):
 
     dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
     dreambooth_pipeline.load_weights("unet")
-    dreambooth_pipeline.train(1000, train_text_encoder=False, train_unet=True)
+    dreambooth_pipeline.train(2000, train_text_encoder=False, train_unet=True)
 
     dreambooth_pipeline.save_sd()
 
