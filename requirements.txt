@@ -1,10 +1,16 @@
-pillow~=9.3.0
-bitsandbytes~=0.35.4
-pyrallis~=0.3.1
-accelerate~=0.12.0
-tqdm~=4.64.1
-transformers~=4.23.1
-loguru~=0.6.0
-ftfy
-lpips
-wandb
+bitsandbytes==0.35.4
+diffusers==0.8.1
+ftfy==6.1.1
+loguru==0.6.0
+lpips==0.1.4
+ninja==1.11.1
+numpy==1.23.4
+Pillow==9.3.0
+pyrallis==0.3.1
+scipy==1.9.3
+tokenizers==0.13.2
+tqdm==4.64.1
+transformers==4.23.1
+triton==2.0.0.dev20221105
+wandb==0.13.5
+xformers @ git+https://github.com/facebookresearch/xformers.git@fd21b404c41303fc8a6e506244ae7fb539110e6e
