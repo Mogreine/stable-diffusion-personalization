@@ -12,13 +12,13 @@ class TrainConfig:
     # Path to the model to fine-tune.
     model_path: str = field(default="models/sd-v1-5-vae-mse")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/director")
+    instance_data_folder: str = field(default="data/instance_images/nikita")
     # Prompt for the instance images.
-    instance_prompt: str = field(default=None)
+    instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
-    class_data_folder: str = field(default="data/class_images/Women")
+    class_data_folder: str = field(default="data/class_images/Men")
     # Prompt for the class images.
-    class_prompt: str = field(default=None)
+    class_prompt: str = field(default="a photo of a man")
     # Number of fine-tuning steps.
     n_steps: int = field(default=200)
     # Number of fine-tuning steps for CLIP.
@@ -59,8 +59,21 @@ class TrainConfig:
     log_images_every_n_steps: int = field(default=100)
     # Use regularization.
     use_prior_preservation: bool = field(default=True)
+    # Offline logging
+    offline_logging: bool = field(default=False)
+    # Gender
+    gender: str = field(default=None)
 
     def __post_init__(self):
-        ...
-        # assert self.instance_prompt is not None, "Instance prompt must be specified."
-        # assert self.class_prompt is not None, "Class prompt must be specified."
+        if self.output_dir is None:
+            self.output_dir = os.path.join(ROOT_DIR, f"models/{self.instance_data_folder.split('/')[-1]}")
+
+        assert self.gender in ["male", "female"], "Gender must be 'male' or 'female'!"
+        if self.gender == "male":
+            self.instance_prompt = "a photo of a sks man"
+            self.class_prompt = "a photo of a man"
+            self.class_data_folder = "data/class_images/Men/"
+        elif self.gender == "female":
+            self.instance_prompt = "a photo of a sks girl"
+            self.class_prompt = "a photo of a girl"
+            self.class_data_folder = "data/class_images/Women/"

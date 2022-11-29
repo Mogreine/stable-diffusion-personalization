@@ -1,10 +1,13 @@
 import os
-from typing import List
-
-import PIL
-from PIL import Image
+import random
 import os.path as osp
 import torch
+import PIL
+import numpy as np
+
+from typing import List
+from PIL import Image
+
 from diffusers import StableDiffusionPipeline, EulerAncestralDiscreteScheduler
 from torchvision import transforms
 
@@ -12,9 +15,19 @@ from torchvision import transforms
 def read_photos_from_folder(path: str) -> List[Image.Image]:
     images = []
     for file in os.listdir(path):
-        images.append(Image.open(os.path.join(path, file)))
+        im = Image.open(os.path.join(path, file))
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        images.append(im)
 
     return images
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 
 def extract_filename(path: str) -> str:

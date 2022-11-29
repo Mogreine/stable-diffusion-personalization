@@ -2,7 +2,6 @@ import functools
 import itertools
 import math
 from pathlib import Path
-import bitsandbytes as bnb
 import lpips
 import numpy as np
 import pyrallis
@@ -13,16 +12,15 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.utils.data import Dataset
 
-from accelerate.utils import set_seed
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from loguru import logger
 
-from src.dreambooth.datasets import PromptDataset, DreamBoothDataset, collate_fn
+from src.dreambooth.datasets import DreamBoothDataset, collate_fn
 from src.dreambooth.configs import TrainConfig
-from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor
+from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor, set_seed
 
 
 class DreamBoothPipeline:
@@ -127,7 +125,7 @@ class DreamBoothPipeline:
 
         wandb.log({"images": [wandb.Image(im) for im in images_generated], "lpips": lil_peep})
 
-    def train(self, n_steps: int, train_text_encoder: bool, train_unet: bool):
+    def train(self, n_steps: int = None, train_text_encoder: bool = True, train_unet: bool = True):
         # Enabling gradient checkpoint
         if self.cfg.gradient_checkpointing:
             self.text_encoder.gradient_checkpointing_enable()
@@ -150,6 +148,9 @@ class DreamBoothPipeline:
             size=self.cfg.resolution,
             center_crop=False,
         )
+
+        if n_steps is None:
+            n_steps = train_dataset.num_instance_images * 200
 
         params_to_optimize = (
             itertools.chain(self.unet.parameters(), self.text_encoder.parameters())
@@ -249,15 +250,14 @@ class DreamBoothPipeline:
 @pyrallis.wrap()
 def main(cfg: TrainConfig):
     set_seed(cfg.seed)
-
     logging_dir = Path(cfg.output_dir, "logs/")
-    wandb.init(project="dreambooth", config=cfg, dir=logging_dir)
+    wandb.init(project="dreambooth", config=cfg, dir=logging_dir, mode="offline" if cfg.offline_logging else "online")
 
     dreambooth_pipeline = DreamBoothPipeline(cfg)
 
     dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
     dreambooth_pipeline.load_weights("unet")
-    dreambooth_pipeline.train(2000, train_text_encoder=False, train_unet=True)
+    dreambooth_pipeline.train(train_text_encoder=False, train_unet=True)
 
     dreambooth_pipeline.save_sd()
 

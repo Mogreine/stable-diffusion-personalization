@@ -34,6 +34,14 @@ class DreamBoothDataset(Dataset):
         self.tokenizer = tokenizer
         self.image_captions_filename = None
 
+        self.image_transforms = transforms.Compose(
+            [
+                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
+
         self.instance_images = self._load_images(instance_data_root, instance_prompt)
         self.num_instance_images = len(self.instance_images)
         self._length = self.num_instance_images
@@ -46,15 +54,6 @@ class DreamBoothDataset(Dataset):
         else:
             self.class_data_root = None
 
-        self.image_transforms = transforms.Compose(
-            [
-                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5]),
-            ]
-        )
-
     def _load_images(self, dir: str, prompt: Optional[str] = None):
         images = []
         for path in list(Path(dir).iterdir()):
@@ -62,7 +61,7 @@ class DreamBoothDataset(Dataset):
             if not image.mode == "RGB":
                 image = image.convert("RGB")
             img_prompt = prompt if prompt else extract_filename(path)
-
+            image = self.image_transforms(image)
             # TODO: Remove
             # logger.info(f"prompt: {img_prompt}")
 
@@ -75,7 +74,7 @@ class DreamBoothDataset(Dataset):
 
     def _prepare_sample(self, index, dataset):
         prompt, image = dataset[index % len(dataset)]
-        image = self.image_transforms(image)
+        # image = self.image_transforms(image)
         prompt = self.tokenizer(
             prompt,
             padding="do_not_pad",
