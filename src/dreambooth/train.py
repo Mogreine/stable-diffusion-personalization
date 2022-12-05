@@ -1,12 +1,15 @@
 import functools
+import importlib
 import itertools
 import math
 from pathlib import Path
+
+import importlib_metadata
 import lpips
 import numpy as np
 import pyrallis
 import wandb
-
+import bitsandbytes as bnb
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -23,11 +26,19 @@ from src.dreambooth.configs import TrainConfig
 from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor, set_seed
 
 
+_xformers_available = importlib.util.find_spec("xformers") is not None
+try:
+    _xformers_version = importlib_metadata.version("xformers")
+    logger.debug(f"Successfully imported xformers version {_xformers_version}")
+except importlib_metadata.PackageNotFoundError:
+    _xformers_available = False
+
+
 class DreamBoothPipeline:
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
-        self.precision = torch.float16
-        self.device = "cuda"
+        self.precision = torch.float32
+        self.device = cfg.device
 
         # Loading models
         self.load_weights("vae")
@@ -78,12 +89,17 @@ class DreamBoothPipeline:
 
         return loss
 
-    def _train_step(self, batch):
+    def _train_step(self, batch, is_vae_latents_precalculated: bool = False):
         # Move batch to device
         batch = {k: v.to(self.device) for k, v in batch.items()}
-        # Convert images to latent space
-        latents = self.vae.encode(batch["pixel_values"]).latent_dist.sample()
-        latents = latents * 0.18215
+
+        # Calculating vae latents
+        if is_vae_latents_precalculated:
+            latents = batch["pixel_values"]
+        else:
+            # Convert images to latent space
+            latents = self.vae.encode(batch["pixel_values"]).latent_dist.sample()
+            latents = latents * 0.18215
 
         # Sample noise that we'll add to the latents
         noise = torch.randn_like(latents)
@@ -147,6 +163,7 @@ class DreamBoothPipeline:
             tokenizer=self.tokenizer,
             size=self.cfg.resolution,
             center_crop=False,
+            vae=self.vae if self.cfg.precalculate_latents else None,
         )
 
         if n_steps is None:
@@ -157,7 +174,10 @@ class DreamBoothPipeline:
             if train_text_encoder
             else self.unet.parameters()
         )
-        optimizer = torch.optim.AdamW(
+        # optimizer_class = bnb.optim.AdamW8bit
+        optimizer_class = torch.optim.AdamW
+
+        optimizer = optimizer_class(
             params_to_optimize,
             lr=self.cfg.lr,
             betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
@@ -169,7 +189,7 @@ class DreamBoothPipeline:
             collate_fn, with_prior_preservation=self.cfg.use_prior_preservation, tokenizer=self.tokenizer
         )
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_
+            train_dataset, batch_size=self.cfg.batch_size, shuffle=True, collate_fn=collate_fn_, pin_memory=True
         )
 
         n_steps_per_epoch = len(train_dataloader)
@@ -203,8 +223,8 @@ class DreamBoothPipeline:
                 self.text_encoder.train()
 
             for step, batch in enumerate(train_dataloader):
-                with torch.amp.autocast(device_type=self.device, dtype=self.precision):
-                    noise, noise_pred = self._train_step(batch)
+                with torch.amp.autocast(device_type="cuda", dtype=self.precision):
+                    noise, noise_pred = self._train_step(batch, train_dataset.is_latents_precalculated)
                     noise_prior, noise_prior_pred = None, None
 
                     if self.cfg.use_prior_preservation:
@@ -220,7 +240,7 @@ class DreamBoothPipeline:
                 scaler.update()
 
                 lr_scheduler.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
                 progress_bar.update(1)
                 global_step += 1
@@ -229,7 +249,7 @@ class DreamBoothPipeline:
                 # Logging
                 wandb.log({"loss": loss.detach().item()})
                 if global_step % self.cfg.log_images_every_n_steps == 0:
-                    with torch.amp.autocast(device_type=self.device, dtype=self.precision):
+                    with torch.amp.autocast(device_type="cuda", dtype=self.precision):
                         self._log_images()
 
                 if global_step >= n_steps:

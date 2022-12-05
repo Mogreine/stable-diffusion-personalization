@@ -12,7 +12,7 @@ class TrainConfig:
     # Path to the model to fine-tune.
     model_path: str = field(default="models/sd-v1-5-vae-mse")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/nikita")
+    instance_data_folder: str = field(default="data/instance_images/kirill_captions")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
@@ -63,6 +63,10 @@ class TrainConfig:
     offline_logging: bool = field(default=False)
     # Gender
     gender: str = field(default=None)
+    # Device
+    device: str = field(default="cuda:0")
+    # Precalculate vae latents
+    precalculate_latents: bool = field(default=False)
 
     def __post_init__(self):
         if self.output_dir is None:
