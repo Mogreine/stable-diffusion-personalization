@@ -255,9 +255,7 @@ def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=EulerAnc
         safety_checker=None,
         feature_extractor=None,
     )
-    images = pipeline(
-        prompt, num_inference_steps=80, guidance_scale=8, num_images_per_prompt=4
-    ).images
+    images = pipeline(prompt, num_inference_steps=80, guidance_scale=8, num_images_per_prompt=4).images
     return images
 
 
@@ -270,3 +268,14 @@ def pil2tensor(im: PIL.Image.Image, size=512):
         ]
     )
     return image_transforms(im)
+
+
+def extract_vae(input_path, output_path):
+    vae = torch.load(input_path)
+
+    res_state_dict = {}
+    for k, v in vae["state_dict"].items():
+        if k.startswith("first_stage_model."):
+            res_state_dict[k.split("first_stage_model.")[-1]] = v
+
+    torch.save(res_state_dict, os.path.join(output_path, "model.vae.pt"))

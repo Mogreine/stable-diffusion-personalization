@@ -9,14 +9,16 @@ from definitions import ROOT_DIR
 @dataclass
 class TrainConfig:
     """Config for training."""
+
     # Path to the model to fine-tune.
-    model_path: str = field(default="models/sd-v1-5-vae-mse")
+    # model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
+    model_path: str = field(default="ItsJayQz/SynthwavePunk-v2")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/kirill_captions")
+    instance_data_folder: str = field(default="data/instance_images/marina-512")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
-    class_data_folder: str = field(default="data/class_images/Men")
+    class_data_folder: str = field(default="data/class_images/Women")
     # Prompt for the class images.
     class_prompt: str = field(default="a photo of a man")
     # Number of fine-tuning steps.
@@ -56,7 +58,7 @@ class TrainConfig:
     # Resolution.
     resolution: int = field(default=512)
     # Log images every n steps.
-    log_images_every_n_steps: int = field(default=100)
+    log_images_every_n_steps: int = field(default=500)
     # Use regularization.
     use_prior_preservation: bool = field(default=True)
     # Offline logging
@@ -64,13 +66,16 @@ class TrainConfig:
     # Gender
     gender: str = field(default=None)
     # Device
-    device: str = field(default="cuda:0")
+    device: str = field(default="cuda:1")
     # Precalculate vae latents
     precalculate_latents: bool = field(default=False)
 
     def __post_init__(self):
         if self.output_dir is None:
-            self.output_dir = os.path.join(ROOT_DIR, f"models/{self.instance_data_folder.split('/')[-1]}")
+            model_name = self.model_path.split("/")[-1]
+            self.output_dir = os.path.join(
+                ROOT_DIR, f"/checkpoints/{model_name}-{self.instance_data_folder.split('/')[-1]}"
+            )
 
         assert self.gender in ["male", "female"], "Gender must be 'male' or 'female'!"
         if self.gender == "male":

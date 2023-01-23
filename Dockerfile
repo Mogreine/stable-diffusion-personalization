@@ -1,17 +1,25 @@
-FROM python:3.10.6
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+
+ENV NV_CUDNN_VERSION 8.6.0.163
+ENV NV_CUDNN_PACKAGE_NAME "libcudnn8"
+
+ENV NV_CUDNN_PACKAGE "$NV_CUDNN_PACKAGE_NAME=$NV_CUDNN_VERSION-1+cuda11.8"
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ${NV_CUDNN_PACKAGE} \
+    && apt-mark hold ${NV_CUDNN_PACKAGE_NAME} \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+RUN echo 'alias python=python3' >> ~/.bashrc
+RUN echo 'NCCL_SOCKET_IFNAME=lo' >> ~/.bashrc
 
 WORKDIR /app
-
 COPY requirements.txt requirements.txt
 
-# Install other requirements
-RUN apt-get update
-RUN DEBIAN_FRONTEND=noninteractive apt-get install ffmpeg libsm6 libxext6 -y
-
 # Activate conda environment for bash
+RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu117 --upgrade
 RUN pip install -r requirements.txt
-RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116 --upgrade
-RUN pip install triton ninja
-RUN pip install -v -U git+https://github.com/facebookresearch/xformers.git@main#egg=xformers
 
 ENTRYPOINT [ "bash" ]

@@ -1,15 +1,13 @@
 import functools
-import importlib
 import itertools
 import math
+import os.path
 from pathlib import Path
 
-import importlib_metadata
 import lpips
 import numpy as np
 import pyrallis
 import wandb
-import bitsandbytes as bnb
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -23,21 +21,13 @@ from loguru import logger
 
 from src.dreambooth.datasets import DreamBoothDataset, collate_fn
 from src.dreambooth.configs import TrainConfig
-from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor, set_seed
-
-
-_xformers_available = importlib.util.find_spec("xformers") is not None
-try:
-    _xformers_version = importlib_metadata.version("xformers")
-    logger.debug(f"Successfully imported xformers version {_xformers_version}")
-except importlib_metadata.PackageNotFoundError:
-    _xformers_available = False
+from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor, set_seed, extract_vae
 
 
 class DreamBoothPipeline:
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
-        self.precision = torch.float32
+        self.precision = torch.float16
         self.device = cfg.device
 
         # Loading models
@@ -55,8 +45,8 @@ class DreamBoothPipeline:
 
     def load_weights(self, model_name: str):
         if model_name == "vae":
-            self.vae = AutoencoderKL.from_pretrained(self.cfg.model_path, subfolder="vae", use_auth_token=True)
-            # self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse")
+            # self.vae = AutoencoderKL.from_pretrained(self.cfg.model_path, subfolder="vae", use_auth_token=True)
+            self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse")
             self._freeze_model(self.vae)
             self.vae.to(self.device)
         elif model_name == "unet":
@@ -127,9 +117,7 @@ class DreamBoothPipeline:
     @torch.no_grad()
     def _log_images(self):
         # Generating images
-        images_generated = sample_images(
-            "a sks man", self.vae, self.unet, self.text_encoder, self.tokenizer
-        )
+        images_generated = sample_images("a sks man", self.vae, self.unet, self.text_encoder, self.tokenizer)
         images_gt = read_photos_from_folder(self.cfg.instance_data_folder)
 
         # Converting PIL images to tensors
@@ -258,6 +246,7 @@ class DreamBoothPipeline:
     def save_sd(self):
         pipeline = StableDiffusionPipeline.from_pretrained(
             self.cfg.model_path,
+            vae=self.vae,
             unet=self.unet,
             text_encoder=self.text_encoder,
             feature_extractor=None,
@@ -265,6 +254,7 @@ class DreamBoothPipeline:
         )
         pipeline.save_pretrained(self.cfg.output_dir)
         convert2ckpt(self.cfg.output_dir)
+        extract_vae(os.path.join(self.cfg.output_dir, "model.ckpt"), self.cfg.output_dir)
 
 
 @pyrallis.wrap()

@@ -91,8 +91,6 @@ class DreamBoothDataset(Dataset):
     def _prepare_sample(self, index, images, prompts):
         dataset_length = len(images)
         image, prompt = images[index % dataset_length], prompts[index % dataset_length]
-        if isinstance(image, PIL.Image.Image):
-            image = self.image_transforms(image)
         prompt = self.tokenizer(
             prompt,
             padding="do_not_pad",
