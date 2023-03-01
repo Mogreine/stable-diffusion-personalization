@@ -1,6 +1,8 @@
 import os
 import random
 import os.path as osp
+import shutil
+
 import torch
 import PIL
 import numpy as np
@@ -245,7 +247,11 @@ def extract_filename(path: str) -> str:
     return osp.splitext(osp.basename(path))[0]
 
 
-def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=EulerAncestralDiscreteScheduler()):
+def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=None):
+    if scheduler is None:
+        scheduler = EulerAncestralDiscreteScheduler(
+            beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear"
+        )
     pipeline = StableDiffusionPipeline(
         vae=vae,
         unet=unet,
@@ -255,7 +261,7 @@ def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=EulerAnc
         safety_checker=None,
         feature_extractor=None,
     )
-    images = pipeline(prompt, num_inference_steps=80, guidance_scale=8, num_images_per_prompt=4).images
+    images = pipeline(prompt, 512, 512, num_inference_steps=40, guidance_scale=8, num_images_per_prompt=5).images
     return images
 
 
@@ -279,3 +285,15 @@ def extract_vae(input_path, output_path):
             res_state_dict[k.split("first_stage_model.")[-1]] = v
 
     torch.save(res_state_dict, os.path.join(output_path, "model.vae.pt"))
+
+
+def clean_directory(folder: str):
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
