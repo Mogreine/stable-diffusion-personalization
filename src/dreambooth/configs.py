@@ -11,10 +11,9 @@ class TrainConfig:
     """Config for training."""
 
     # Path to the model to fine-tune.
-    # model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
-    model_path: str = field(default="ItsJayQz/SynthwavePunk-v2")
+    model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/marina-512")
+    instance_data_folder: str = field(default="data/instance_images/war-woman-1")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
