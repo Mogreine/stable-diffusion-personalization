@@ -1,5 +1,9 @@
 import functools
+import io
 import os
+
+import numpy as np
+
 import wandb
 import requests
 import pyrallis
@@ -7,9 +11,9 @@ import pyrallis
 from PIL import Image
 from pathlib import Path
 from loguru import logger
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 
-from definitions import ROOT_DIR
+from definitions import ROOT_DIR, GREETINGS_MESSAGE
 from src.dreambooth.configs import TrainConfig
 from src.dreambooth.train import DreamBoothPipeline
 from src.utils import sample_images, set_seed, clean_directory
@@ -50,8 +54,57 @@ bot = Bot(token=os.environ.get("VK_TOKEN"))
 doc_uploader = DocMessagesUploader(bot.api)
 
 
+def download_attached_images(message: Message) -> List[str]:
+    urls = [attach.doc.url for attach in message.attachments]
+    logger.info(f"{message.attachments}")
+    logger.info(f"Found {len(urls)} urls of images")
+    ims = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+    paths = []
+
+    for i, im in enumerate(ims):
+        path = f"{cfg.instance_data_folder}/im_{i}.png"
+        im.save(path)
+        paths.append(path)
+
+    return paths
+
+
+async def generate_images(message: Message, image_sampler: Callable, prompts: List[str]):
+    ims_paths = []
+    for prompt in prompts:
+        images = image_sampler(prompt)
+
+        for i, im in enumerate(images):
+            im_path = f"{cfg.output_dir}im_{i}.png"
+            im.save(im_path)
+            ims_paths.append(im_path)
+
+            buf = io.BytesIO()
+            im.save(buf, format='png')
+            byte_im = buf.getvalue()
+
+            doc = await doc_uploader.upload(
+                f"im_{np.random.randint(100, 100000)}.png",
+                # file_source=im_path,
+                file_source=byte_im,
+                peer_id=message.peer_id,
+            )
+            await message.answer(attachment=doc)
+
+
+def crop_and_save_image(paths: List[str]):
+    for path in paths:
+        im_pil = Image.open(path).convert("RGB").resize((512, 512), Image.BILINEAR)
+        im_pil.save(path)
+
+
+@bot.on.message(func=lambda message: message.text == "Правила")
+async def rules_handler(message: Message):
+    await message.answer(GREETINGS_MESSAGE)
+
+
 @bot.on.message()
-async def handle(message: Message):
+async def generation_handler(message: Message):
     try:
         if message.text and len(message.attachments) > 0:
             if message.text == "male":
@@ -62,7 +115,7 @@ async def handle(message: Message):
                 prompts = girl_prompts
             else:
                 logger.info(f"Wrong gender retrieved!")
-                return "Wrong gender!"
+                return f"Wrong gender: {message.text}. Must be 'male' or 'female'."
             cfg.__post_init__()
 
             logger.info(f"Got message from: {message.from_id}")
@@ -74,32 +127,17 @@ async def handle(message: Message):
             clean_directory(cfg.output_dir)
 
             # Downloading attached images
-            urls = [attach.doc.url for attach in message.attachments]
-            ims = [Image.open(requests.get(url, stream=True).raw) for url in urls]
-            for i, im in enumerate(ims):
-                path = f"{cfg.instance_data_folder}/im_{i}.png"
-                im.save(path)
+            paths = download_attached_images(message)
+
+            # Crop images to 512x512
+            crop_and_save_image(paths)
 
             logger.info("Training dreambooth...")
             image_sampler = train_dreambooth(cfg)
 
             logger.info("Generating images...")
             await message.answer("Generating images...")
-            ims_paths = []
-            for prompt in prompts:
-                images = image_sampler(prompt)
-
-                for i, im in enumerate(images):
-                    im_path = f"{cfg.output_dir}im_{i}.png"
-                    im.save(im_path)
-                    ims_paths.append(im_path)
-
-                    doc = await doc_uploader.upload(
-                        f"im_{i}.png",
-                        file_source=im_path,
-                        peer_id=message.peer_id,
-                    )
-                    await message.answer(attachment=doc)
+            await generate_images(message, image_sampler, prompts)
 
             logger.info("Images has been sent!")
     except Exception as e:
@@ -120,5 +158,6 @@ if __name__ == "__main__":
     Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Loaded model: {cfg.model_path}")
+    logger.info(f"Running with config:\n {cfg}")
 
     bot.run_forever()
