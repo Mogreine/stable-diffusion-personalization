@@ -247,11 +247,12 @@ def extract_filename(path: str) -> str:
     return osp.splitext(osp.basename(path))[0]
 
 
-def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=None):
+def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=None, seed=0xC0FFEE):
     if scheduler is None:
         scheduler = EulerAncestralDiscreteScheduler(
             beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear"
         )
+    set_seed(seed)
     pipeline = StableDiffusionPipeline(
         vae=vae,
         unet=unet,

@@ -63,7 +63,7 @@ class TrainConfig:
     # Offline logging
     offline_logging: bool = field(default=False)
     # Gender
-    gender: str = field(default=None)
+    gender: str = field(default="male")
     # Device
     device: str = field(default="cuda:1")
     # Precalculate vae latents

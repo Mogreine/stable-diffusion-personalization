@@ -1,4 +1,3 @@
 import os
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-TOKEN = "vk1.a.mFhbT_9mXPAt9B1GHmCcYDM6Pt-ov-ckJtcSjDZXoEqBAQc3t0qCnZT7xpwkim2r0n8Q-UEq1PAPw3xbdxq7pFQ3ZyifCKn3Ca7iDQ4mIBZzFh8EY4eGGWkapZ41614_k00NIk2OnKFapEKCS83AFYX11LM1-WdvUlddprCBDOEbBoahcr2grGfF69KM5_9JDxk2VY_Lk9pMNULlJDAVDw"
