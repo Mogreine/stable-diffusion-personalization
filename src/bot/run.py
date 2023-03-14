@@ -15,6 +15,7 @@ from loguru import logger
 from typing import List, Tuple
 
 import vk_api
+from vk_api.utils import get_random_id
 from vk_api.longpoll import VkEventType, VkLongPoll
 
 from definitions import TOKEN
@@ -23,14 +24,14 @@ from src.dreambooth.train import DreamBoothPipeline
 from src.utils import sample_images, set_seed, clean_directory
 
 
-def upload_photo(api, uid: int, files: List[str]):
+def upload_photo(api, uid: int, files: List[str], peer_id: int):
     upload = vk_api.VkUpload(api)
-    photos = upload.photo_messages(files)
+    photos = upload.photo_messages(files, peer_id=peer_id)
 
     for i in range(len(photos)):
         attachment = "photo" + str(photos[i]["owner_id"]) + "_" + str(photos[i]["id"])
 
-        res = api.messages.send(user_id=uid, attachment=attachment, random_id=randint(100, 200000))
+        res = api.messages.send(user_id=uid, attachment=attachment, random_id=get_random_id())
 
         logger.info(res)
 
@@ -38,29 +39,13 @@ def upload_photo(api, uid: int, files: List[str]):
             attachment += ","
 
 
-def generate_and_save_images(prompt: str, pipe: StableDiffusionPipeline, args: argparse.ArgumentParser) -> List[str]:
-    base_count = len(os.listdir(args.outdir))
-    images = pipe(
-        prompt, height=args.H, width=args.W, num_images_per_prompt=args.n_samples, num_inference_steps=args.num_steps
-    ).images
-    image_paths = []
-
-    for image in images:
-        image_path = os.path.join(args.outdir, f"grid-{base_count:04}.png")
-        image.save(image_path)
-        base_count += 1
-        image_paths.append(image_path)
-
-    return image_paths
-
-
 def train_dreambooth(cfg: TrainConfig):
     set_seed(cfg.seed)
     dreambooth_pipeline = DreamBoothPipeline(cfg)
 
-    dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
-    dreambooth_pipeline.load_weights("unet")
-    dreambooth_pipeline.train(train_text_encoder=False, train_unet=True)
+    # dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
+    # dreambooth_pipeline.load_weights("unet")
+    # dreambooth_pipeline.train(train_text_encoder=False, train_unet=True)
 
     return functools.partial(
         sample_images,
@@ -139,17 +124,21 @@ def main(cfg: TrainConfig):
                     image_sampler = train_dreambooth(cfg)
 
                     logger.info("Generating images...")
+                    ims_paths = []
                     for prompt in prompts:
                         images = image_sampler(prompt)
 
-                        ims_paths = []
                         for i, im in enumerate(images):
                             im_path = f"{cfg.output_dir}im_{i}.png"
                             im.save(im_path)
                             ims_paths.append(im_path)
 
                         # Need to send images somehow
-                        upload_photo(vk, event.user_id, ims_paths)
+                        # vk.messages.send(user_id=event.user_id, message="asddd", random_id=get_random_id())
+                    logger.info(event.user_id)
+                    logger.info(ims_paths)
+                    logger.info(event.peer_id)
+                    upload_photo(vk, event.user_id, [ims_paths[0]], event.peer_id)
 
                     logger.info("Image has been sent!")
         except KeyboardInterrupt:
