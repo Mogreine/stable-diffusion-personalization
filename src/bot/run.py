@@ -70,15 +70,10 @@ def download_attached_images(message: Message) -> List[str]:
 
 
 async def generate_images(message: Message, image_sampler: Callable, prompts: List[str]):
-    ims_paths = []
     for prompt in prompts:
         images = image_sampler(prompt)
 
         for i, im in enumerate(images):
-            im_path = f"{cfg.output_dir}im_{i}.png"
-            im.save(im_path)
-            ims_paths.append(im_path)
-
             buf = io.BytesIO()
             im.save(buf, format='png')
             byte_im = buf.getvalue()
@@ -98,15 +93,24 @@ def crop_and_save_image(paths: List[str]):
         im_pil.save(path)
 
 
-@bot.on.message(func=lambda message: message.text == "Правила")
+@bot.on.message(func=lambda message: message.text.lower() == "правила")
 async def rules_handler(message: Message):
     await message.answer(GREETINGS_MESSAGE)
 
 
+IS_GENERATING = False
+
+
 @bot.on.message()
 async def generation_handler(message: Message):
+    global IS_GENERATING
     try:
         if message.text and len(message.attachments) > 0:
+            if IS_GENERATING:
+                return "The bot is busy -- please try later"
+
+            IS_GENERATING = True
+
             if message.text == "male":
                 cfg.gender = "male"
                 prompts = man_prompts
@@ -140,6 +144,7 @@ async def generation_handler(message: Message):
             await generate_images(message, image_sampler, prompts)
 
             logger.info("Images has been sent!")
+            IS_GENERATING = False
     except Exception as e:
         logger.info(e)
         return "Something went wrong, please, send another request"
