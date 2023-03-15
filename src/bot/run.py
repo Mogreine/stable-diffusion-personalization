@@ -23,6 +23,11 @@ from vkbottle.bot import Bot, Message
 from vkbottle.tools import DocMessagesUploader
 
 
+bot = Bot(token=os.environ.get("VK_TOKEN"))
+doc_uploader = DocMessagesUploader(bot.api)
+IS_GENERATING = False
+
+
 def train_dreambooth(cfg: TrainConfig):
     set_seed(cfg.seed)
     dreambooth_pipeline = DreamBoothPipeline(cfg)
@@ -48,10 +53,6 @@ def load_prompts() -> Tuple[List[str], List[str]]:
     return read_lines_file(os.path.join(ROOT_DIR, "data/prompts_man.txt")), read_lines_file(
         os.path.join(ROOT_DIR, "data/prompts_girl.txt")
     )
-
-
-bot = Bot(token=os.environ.get("VK_TOKEN"))
-doc_uploader = DocMessagesUploader(bot.api)
 
 
 def download_attached_images(message: Message) -> List[str]:
@@ -96,9 +97,6 @@ def crop_and_save_image(paths: List[str]):
 @bot.on.message(func=lambda message: message.text.lower() == "правила")
 async def rules_handler(message: Message):
     await message.answer(GREETINGS_MESSAGE)
-
-
-IS_GENERATING = False
 
 
 @bot.on.message()
