@@ -12,6 +12,9 @@ from PIL import Image
 from pathlib import Path
 from loguru import logger
 from typing import List, Tuple, Callable
+from face_detection import RetinaFace
+from skimage import io as skio
+from pillow_heif import register_heif_opener
 
 from definitions import ROOT_DIR, GREETINGS_MESSAGE
 from src.dreambooth.configs import TrainConfig
@@ -26,6 +29,7 @@ from vkbottle.tools import DocMessagesUploader
 bot = Bot(token=os.environ.get("VK_TOKEN"))
 doc_uploader = DocMessagesUploader(bot.api)
 IS_GENERATING = False
+register_heif_opener()
 
 
 def train_dreambooth(cfg: TrainConfig):
@@ -90,8 +94,35 @@ async def generate_images(message: Message, image_sampler: Callable, prompts: Li
 
 def crop_and_save_image(paths: List[str]):
     for path in paths:
-        im_pil = Image.open(path).convert("RGB").resize((512, 512), Image.BILINEAR)
-        im_pil.save(path)
+        im = skio.imread(path)
+        im_pil = Image.open(path).convert("RGB")
+        box = get_face_box(im)
+        im_cropped = crop_face(im_pil, *box)
+        im_cropped.save(path)
+
+
+def get_face_box(img):
+    detector = RetinaFace(gpu_id=0)
+    faces = detector(img)
+    box, landmarks, score = faces[0]
+
+    return box
+
+
+def crop_face(img: Image.Image, lt_x: float, lt_y: float, br_x: float, br_y: float, crop_dim: int = 512) -> Image.Image:
+    center_x = (lt_x + br_x) / 2
+    center_y = (lt_y + br_y) / 2
+
+    half_crop = crop_dim // 2
+    width, height = img.size
+
+    lt_x_new, lt_y_new = center_x - half_crop, center_y - half_crop
+    rb_x_new, rb_y_new = center_x + half_crop, center_y - half_crop
+
+    lt_x_new, lt_y_new = max(0, lt_x_new), max(0, lt_y_new)
+    rb_x_new, rb_y_new = min(width, rb_x_new), min(height, rb_y_new)
+
+    return img.crop((lt_x_new, lt_y_new, rb_x_new, rb_y_new)).resize((crop_dim, crop_dim))
 
 
 @bot.on.message(func=lambda message: message.text.lower() == "правила")
@@ -117,6 +148,7 @@ async def generation_handler(message: Message):
                 prompts = girl_prompts
             else:
                 logger.info(f"Wrong gender retrieved!")
+                IS_GENERATING = False
                 return f"Wrong gender: {message.text}. Must be 'male' or 'female'."
             cfg.__post_init__()
 
@@ -145,7 +177,8 @@ async def generation_handler(message: Message):
             IS_GENERATING = False
     except Exception as e:
         logger.info(e)
-        return "Something went wrong, please, send another request"
+        IS_GENERATING = False
+        await message.answer("Something went wrong, please, send another request")
 
 
 if __name__ == "__main__":
@@ -156,7 +189,7 @@ if __name__ == "__main__":
     man_prompts, girl_prompts = load_prompts()
     cfg.instance_data_folder = os.path.join(ROOT_DIR, "data/input_bot/")
     cfg.output_dir = os.path.join(ROOT_DIR, "data/output_bot/")
-    cfg.precalculate_latents = True
+    cfg.precalculate_latents = False
     Path(cfg.instance_data_folder).mkdir(parents=True, exist_ok=True)
     Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
 

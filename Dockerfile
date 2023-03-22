@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-mark hold ${NV_CUDNN_PACKAGE_NAME} \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update -y \
-    && apt-get install -y python3-pip
+    && apt-get install -y python3-pip \
+    && apt-get install git-all
 RUN echo 'alias python=python3' >> ~/.bashrc
 RUN echo 'NCCL_SOCKET_IFNAME=lo' >> ~/.bashrc
 
@@ -21,5 +22,6 @@ COPY requirements.txt requirements.txt
 # Activate conda environment for bash
 RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu117 --upgrade
 RUN pip install -r requirements.txt
+RUN pip install git+https://github.com/elliottzheng/face-detection.git@master
 
 ENTRYPOINT [ "bash" ]

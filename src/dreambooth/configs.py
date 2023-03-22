@@ -11,9 +11,10 @@ class TrainConfig:
     """Config for training."""
 
     # Path to the model to fine-tune.
-    model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
+    # model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
+    model_path: str = field(default="runwayml/stable-diffusion-v1-5")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/war-woman-1")
+    instance_data_folder: str = field(default="data/instance_images/white-girl")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
@@ -63,9 +64,9 @@ class TrainConfig:
     # Offline logging
     offline_logging: bool = field(default=False)
     # Gender
-    gender: str = field(default="male")
+    gender: str = field(default="female")
     # Device
-    device: str = field(default="cuda:1")
+    device: str = field(default="cuda:0")
     # Precalculate vae latents
     precalculate_latents: bool = field(default=False)
 
