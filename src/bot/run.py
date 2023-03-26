@@ -92,12 +92,14 @@ async def generate_images(message: Message, image_sampler: Callable, prompts: Li
             await message.answer(attachment=doc)
 
 
-def crop_and_save_image(paths: List[str]):
+async def crop_and_save_image(message, paths: List[str]):
     for path in paths:
         im = skio.imread(path)
         im_pil = Image.open(path).convert("RGB")
         box = get_face_box(im)
-        im_cropped = crop_face(im_pil, *box)
+        await message.answer(box)
+        im_cropped, box = crop_face(im_pil, *box)
+        await message.answer(box)
         im_cropped.save(path)
 
 
@@ -113,16 +115,23 @@ def crop_face(img: Image.Image, lt_x: float, lt_y: float, br_x: float, br_y: flo
     center_x = (lt_x + br_x) / 2
     center_y = (lt_y + br_y) / 2
 
-    half_crop = crop_dim // 2
     width, height = img.size
+    new_side_size = min(width, height)
+    half_crop = new_side_size // 2
 
     lt_x_new, lt_y_new = center_x - half_crop, center_y - half_crop
-    rb_x_new, rb_y_new = center_x + half_crop, center_y - half_crop
+    rb_x_new, rb_y_new = center_x + half_crop, center_y + half_crop
+
+    lt_x_new += min(0, width - rb_x_new)
+    rb_x_new += abs(min(0, lt_x_new))
+    lt_y_new += min(0, height - rb_y_new)
+    rb_y_new += abs(min(0, lt_y_new))
 
     lt_x_new, lt_y_new = max(0, lt_x_new), max(0, lt_y_new)
     rb_x_new, rb_y_new = min(width, rb_x_new), min(height, rb_y_new)
 
-    return img.crop((lt_x_new, lt_y_new, rb_x_new, rb_y_new)).resize((crop_dim, crop_dim))
+    return img.crop((lt_x_new, lt_y_new, rb_x_new, rb_y_new)).resize((crop_dim, crop_dim)), (
+    lt_x_new, lt_y_new, rb_x_new, rb_y_new)
 
 
 @bot.on.message(func=lambda message: message.text.lower() == "правила")
@@ -164,7 +173,17 @@ async def generation_handler(message: Message):
             paths = download_attached_images(message)
 
             # Crop images to 512x512
-            crop_and_save_image(paths)
+            await crop_and_save_image(message, paths)
+
+            ###############################
+            for im_path in paths:
+                doc = await doc_uploader.upload(
+                    f"im_{np.random.randint(100, 100000)}.png",
+                    file_source=im_path,
+                    peer_id=message.peer_id,
+                )
+                await message.answer(attachment=doc)
+            ###############################
 
             logger.info("Training dreambooth...")
             image_sampler = train_dreambooth(cfg)
