@@ -36,9 +36,9 @@ def train_dreambooth(cfg: TrainConfig):
     set_seed(cfg.seed)
     dreambooth_pipeline = DreamBoothPipeline(cfg)
 
-    dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
-    dreambooth_pipeline.load_weights("unet")
-    dreambooth_pipeline.train(train_text_encoder=False, train_unet=True)
+    # dreambooth_pipeline.train(300, train_text_encoder=True, train_unet=True)
+    # dreambooth_pipeline.load_weights("unet")
+    # dreambooth_pipeline.train(train_text_encoder=False, train_unet=True)
 
     return functools.partial(
         sample_images,
@@ -74,22 +74,70 @@ def download_attached_images(message: Message) -> List[str]:
     return paths
 
 
+# async def generate_images(message: Message, image_sampler: Callable, prompts: List[str]):
+#     for prompt in prompts:
+#         images = image_sampler(prompt)
+#
+#         for i, im in enumerate(images):
+#             buf = io.BytesIO()
+#             im.save(buf, format="png")
+#             byte_im = buf.getvalue()
+#
+#             doc = await doc_uploader.upload(
+#                 f"im_{np.random.randint(100, 100000)}.png",
+#                 # file_source=im_path,
+#                 file_source=byte_im,
+#                 peer_id=message.peer_id,
+#             )
+#             await message.answer(attachment=doc)
+
+
+import os, shutil
+
+def delete_files(folder):
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+
 async def generate_images(message: Message, image_sampler: Callable, prompts: List[str]):
-    for prompt in prompts:
+    delete_files("./data/output_bot")
+    for i, prompt in enumerate(prompts):
         images = image_sampler(prompt)
 
-        for i, im in enumerate(images):
-            buf = io.BytesIO()
-            im.save(buf, format='png')
-            byte_im = buf.getvalue()
+        for j, im in enumerate(images):
+            im.save(f"./data/output_bot/{i}_{j}.png")
 
-            doc = await doc_uploader.upload(
-                f"im_{np.random.randint(100, 100000)}.png",
-                # file_source=im_path,
-                file_source=byte_im,
-                peer_id=message.peer_id,
-            )
-            await message.answer(attachment=doc)
+    await upload_archive(message)
+
+
+import zipfile
+
+
+def zipdir(path, ziph):
+    # ziph is zipfile handle
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            ziph.write(os.path.join(root, file),
+                       os.path.relpath(os.path.join(root, file),
+                                       os.path.join(path, '..')))
+
+async def upload_archive(message: Message):
+    archive_path = "./data/test_archive.zip"
+    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipdir('./data/output_bot', zipf)
+
+    doc = await doc_uploader.upload(
+        f"im_{np.random.randint(100, 100000)}.zip",
+        file_source=archive_path,
+        peer_id=message.peer_id,
+    )
+    await message.answer(attachment=doc)
 
 
 async def crop_and_save_image(message, paths: List[str]):
@@ -131,7 +179,11 @@ def crop_face(img: Image.Image, lt_x: float, lt_y: float, br_x: float, br_y: flo
     rb_x_new, rb_y_new = min(width, rb_x_new), min(height, rb_y_new)
 
     return img.crop((lt_x_new, lt_y_new, rb_x_new, rb_y_new)).resize((crop_dim, crop_dim)), (
-    lt_x_new, lt_y_new, rb_x_new, rb_y_new)
+        lt_x_new,
+        lt_y_new,
+        rb_x_new,
+        rb_y_new,
+    )
 
 
 @bot.on.message(func=lambda message: message.text.lower() == "правила")
@@ -208,7 +260,7 @@ if __name__ == "__main__":
     man_prompts, girl_prompts = load_prompts()
     cfg.instance_data_folder = os.path.join(ROOT_DIR, "data/input_bot/")
     cfg.output_dir = os.path.join(ROOT_DIR, "data/output_bot/")
-    cfg.precalculate_latents = False
+    cfg.precalculate_latents = True
     Path(cfg.instance_data_folder).mkdir(parents=True, exist_ok=True)
     Path(cfg.output_dir).mkdir(parents=True, exist_ok=True)
 

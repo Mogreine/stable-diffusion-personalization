@@ -12,13 +12,14 @@ class TrainConfig:
 
     # Path to the model to fine-tune.
     # model_path: str = field(default="dreamlike-art/dreamlike-diffusion-1.0")
-    model_path: str = field(default="runwayml/stable-diffusion-v1-5")
+    # model_path: str = field(default="runwayml/stable-diffusion-v1-5")
+    model_path: str = field(default="falca/dreamshaper")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/white-girl")
+    instance_data_folder: str = field(default="data/instance_images/kirienko")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
-    class_data_folder: str = field(default="data/class_images/Women")
+    class_data_folder: str = field(default="data/class_images/Men")
     # Prompt for the class images.
     class_prompt: str = field(default="a photo of a man")
     # Number of fine-tuning steps.
@@ -68,7 +69,7 @@ class TrainConfig:
     # Device
     device: str = field(default="cuda:0")
     # Precalculate vae latents
-    precalculate_latents: bool = field(default=False)
+    precalculate_latents: bool = field(default=True)
 
     def __post_init__(self):
         if self.output_dir is None:
