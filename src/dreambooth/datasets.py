@@ -57,6 +57,7 @@ class DreamBoothDataset(Dataset):
         self.num_instance_images = len(self.instance_images)
         self._length = self.num_instance_images
 
+        self.class_images = None
         if class_data_root is not None:
             self.class_images, self.class_prompts = self._load_images(class_data_root, class_prompt)
             if vae is not None:

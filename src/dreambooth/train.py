@@ -18,10 +18,19 @@ from diffusers.optimization import get_scheduler
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from loguru import logger
+from bitsandbytes.optim import AdamW8bit
 
+from xformers.ops import MemoryEfficientAttentionFlashAttentionOp
+
+from diffusers.models.attention_processor import AttnProcessor2_0, XFormersAttnProcessor
 from src.dreambooth.datasets import DreamBoothDataset, collate_fn
 from src.dreambooth.configs import TrainConfig
 from src.utils import convert2ckpt, sample_images, read_photos_from_folder, pil2tensor, set_seed, extract_vae
+
+torch._C._jit_set_profiling_executor(False)
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.allow_tf32 = True
+torch.backends.cuda.matmul.allow_tf32 = True
 
 
 class DreamBoothPipeline:
@@ -34,6 +43,10 @@ class DreamBoothPipeline:
         self.load_weights("vae")
         self.load_weights("unet")
         self.load_weights("text_encoder")
+
+        # self.text_encoder = torch.compile(self.text_encoder, mode="reduce-overhead", fullgraph=True)
+        # self.unet = torch.compile(self.unet, mode="reduce-overhead", fullgraph=True)
+        # logger.info(f"Compiled!")
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
             cfg.model_path,
@@ -106,7 +119,7 @@ class DreamBoothPipeline:
         encoder_hidden_states = self.text_encoder(batch["input_ids"])[0]
 
         # Predict the noise residual
-        noise_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states).sample
+        noise_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]# .sample
 
         return noise, noise_pred
 
@@ -127,13 +140,18 @@ class DreamBoothPipeline:
         # Calculating LPIPS
         lil_peep = self._set_wise_lil_peep(images_generated_t, images_gt_t)
 
-        wandb.log({"images": [wandb.Image(im) for im in images_generated], "lpips": lil_peep})
+        # wandb.log({"images": [wandb.Image(im) for im in images_generated], "lpips": lil_peep})
 
     def train(self, n_steps: int = None, train_text_encoder: bool = True, train_unet: bool = True):
+        # self.unet.enable_xformers_memory_efficient_attention(attention_op=MemoryEfficientAttentionFlashAttentionOp)
+        self.unet.set_attn_processor(XFormersAttnProcessor())
+        # self.unet.set_attn_processor(AttnProcessor2_0())
+        # self.unet.set_default_attn_processor()
+
         # Enabling gradient checkpoint
         if self.cfg.gradient_checkpointing:
             self.text_encoder.gradient_checkpointing_enable()
-            self.unet.gradient_checkpointing_enable()
+            self.unet.enable_gradient_checkpointing()
 
         # Freezing models
         if not train_text_encoder:
@@ -154,6 +172,11 @@ class DreamBoothPipeline:
             vae=self.vae if self.cfg.precalculate_latents else None,
         )
 
+        # if self.cfg.precalculate_latents:
+        #     self.vae.to("cpu")
+        #     del self.vae
+        #     torch.cuda.empty_cache()
+
         if n_steps is None:
             n_steps = train_dataset.num_instance_images * 200
 
@@ -162,8 +185,10 @@ class DreamBoothPipeline:
             if train_text_encoder
             else self.unet.parameters()
         )
-        # optimizer_class = bnb.optim.AdamW8bit
-        optimizer_class = torch.optim.AdamW
+        if self.cfg.use_8bit_adam:
+            optimizer_class = AdamW8bit
+        else:
+            optimizer_class = torch.optim.AdamW
 
         optimizer = optimizer_class(
             params_to_optimize,
@@ -235,10 +260,10 @@ class DreamBoothPipeline:
                 progress_bar.set_postfix({"loss": loss.detach().item()})
 
                 # Logging
-                wandb.log({"loss": loss.detach().item()})
-                if global_step % self.cfg.log_images_every_n_steps == 0:
-                    with torch.amp.autocast(device_type="cuda", dtype=self.precision):
-                        self._log_images()
+                # wandb.log({"loss": loss.detach().item()})
+                # if global_step % self.cfg.log_images_every_n_steps == 0:
+                #     with torch.amp.autocast(device_type="cuda", dtype=self.precision):
+                #         self._log_images()
 
                 if global_step >= n_steps:
                     break

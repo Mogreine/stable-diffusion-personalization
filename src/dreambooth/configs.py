@@ -15,7 +15,7 @@ class TrainConfig:
     # model_path: str = field(default="runwayml/stable-diffusion-v1-5")
     model_path: str = field(default="falca/dreamshaper")
     # Path to the instance images.
-    instance_data_folder: str = field(default="data/instance_images/kirienko")
+    instance_data_folder: str = field(default="data/instance_images/girl-10")
     # Prompt for the instance images.
     instance_prompt: str = field(default="a photo of a sks man")
     # Path to the class images.
@@ -30,10 +30,6 @@ class TrainConfig:
     output_dir: str = field(default=None)
     # Random seed.
     seed: int = field(default=123)
-    # Use gradient checkpointing.
-    gradient_checkpointing: bool = field(default=False)
-    # Use 8-bit Adam.
-    use_8bit_adam: bool = field(default=False)
     # Learning rate.
     lr: float = field(default=2e-6)
     # Weight decay.
@@ -63,11 +59,15 @@ class TrainConfig:
     # Use regularization.
     use_prior_preservation: bool = field(default=True)
     # Offline logging
-    offline_logging: bool = field(default=False)
+    offline_logging: bool = field(default=True)
     # Gender
     gender: str = field(default="female")
     # Device
     device: str = field(default="cuda:0")
+    # Use gradient checkpointing.
+    gradient_checkpointing: bool = field(default=False)
+    # Use 8-bit Adam.
+    use_8bit_adam: bool = field(default=False)
     # Precalculate vae latents
     precalculate_latents: bool = field(default=True)
 
