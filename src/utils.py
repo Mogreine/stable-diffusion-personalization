@@ -249,9 +249,7 @@ def extract_filename(path: str) -> str:
 
 def sample_images(prompt, vae, unet, text_encoder, tokenizer, scheduler=None, seed=0xC0FFEE):
     if scheduler is None:
-        scheduler = EulerAncestralDiscreteScheduler(
-            beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear"
-        )
+        scheduler = EulerAncestralDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear")
     set_seed(seed)
     pipeline = StableDiffusionPipeline(
         vae=vae,
@@ -297,4 +295,4 @@ def clean_directory(folder: str):
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
         except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+            print("Failed to delete %s. Reason: %s" % (file_path, e))

@@ -20,8 +20,6 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from loguru import logger
 from bitsandbytes.optim import AdamW8bit
 
-from xformers.ops import MemoryEfficientAttentionFlashAttentionOp
-
 from diffusers.models.attention_processor import AttnProcessor2_0, XFormersAttnProcessor
 from src.dreambooth.datasets import DreamBoothDataset, collate_fn
 from src.dreambooth.configs import TrainConfig
@@ -43,10 +41,6 @@ class DreamBoothPipeline:
         self.load_weights("vae")
         self.load_weights("unet")
         self.load_weights("text_encoder")
-
-        # self.text_encoder = torch.compile(self.text_encoder, mode="reduce-overhead", fullgraph=True)
-        # self.unet = torch.compile(self.unet, mode="reduce-overhead", fullgraph=True)
-        # logger.info(f"Compiled!")
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
             cfg.model_path,
@@ -119,7 +113,7 @@ class DreamBoothPipeline:
         encoder_hidden_states = self.text_encoder(batch["input_ids"])[0]
 
         # Predict the noise residual
-        noise_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]# .sample
+        noise_pred = self.unet(noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]  # .sample
 
         return noise, noise_pred
 
@@ -171,11 +165,6 @@ class DreamBoothPipeline:
             center_crop=False,
             vae=self.vae if self.cfg.precalculate_latents else None,
         )
-
-        # if self.cfg.precalculate_latents:
-        #     self.vae.to("cpu")
-        #     del self.vae
-        #     torch.cuda.empty_cache()
 
         if n_steps is None:
             n_steps = train_dataset.num_instance_images * 200
